@@ -11,6 +11,7 @@ import {
   Upload,
   XCircle,
 } from 'lucide-react';
+import { FishIllustration } from '@/components/FishIllustration';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -429,39 +430,47 @@ export function CatchLogAndIdTab() {
             </div>
 
             <div className="rounded-lg border bg-primary/10 p-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-bold text-primary">
-                  Likely Match: {matchedSpecies.name} ({matchedSpecies.maoriName})
-                </span>
-                <Badge
-                  variant={
-                    matchedSpecies.minSizeCm && arMeasureCm < matchedSpecies.minSizeCm
-                      ? 'destructive'
-                      : 'outline'
-                  }
-                >
-                  {matchedSpecies.minSizeCm
-                    ? arMeasureCm >= matchedSpecies.minSizeCm
-                      ? `LEGAL (≥${matchedSpecies.minSizeCm}cm)`
-                      : `UNDERSIZE (<${matchedSpecies.minSizeCm}cm)`
-                    : 'No Min Size'}
-                </Badge>
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>
-                  Limit: {matchedSpecies.dailyLimit} · Bait: {matchedSpecies.bestBait}
-                </span>
-                <Button
-                  size="xs"
-                  onClick={() => {
-                    setSpecies(matchedSpecies.name);
-                    setLengthCm(String(arMeasureCm));
-                    addCatch(false);
-                  }}
-                  className="shrink-0"
-                >
-                  + Log Catch
-                </Button>
+              <div className="flex items-center gap-3">
+                <div className="w-24 shrink-0 rounded-lg bg-slate-950/60 p-1">
+                  <FishIllustration speciesId={matchedSpecies.id} className="h-12 w-full" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-bold text-primary">
+                      {matchedSpecies.name} ({matchedSpecies.maoriName})
+                    </span>
+                    <Badge
+                      variant={
+                        matchedSpecies.minSizeCm && arMeasureCm < matchedSpecies.minSizeCm
+                          ? 'destructive'
+                          : 'outline'
+                      }
+                      className="shrink-0"
+                    >
+                      {matchedSpecies.minSizeCm
+                        ? arMeasureCm >= matchedSpecies.minSizeCm
+                          ? `LEGAL (≥${matchedSpecies.minSizeCm}cm)`
+                          : `UNDERSIZE (<${matchedSpecies.minSizeCm}cm)`
+                        : 'No Min Size'}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="truncate">
+                      Limit: {matchedSpecies.dailyLimit} · Bait: {matchedSpecies.bestBait}
+                    </span>
+                    <Button
+                      size="xs"
+                      onClick={() => {
+                        setSpecies(matchedSpecies.name);
+                        setLengthCm(String(arMeasureCm));
+                        addCatch(false);
+                      }}
+                      className="shrink-0"
+                    >
+                      + Log Catch
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -510,7 +519,10 @@ export function CatchLogAndIdTab() {
         <CardContent>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filteredSpecies.map((sp) => (
-              <div key={sp.id} className="rounded-xl border bg-muted/20 p-3.5 text-sm">
+              <div key={sp.id} className="overflow-hidden rounded-xl border bg-muted/20 p-3.5 text-sm">
+                <div className="mb-2.5 flex items-center justify-center rounded-lg border bg-gradient-to-b from-slate-900 to-slate-950 p-2">
+                  <FishIllustration speciesId={sp.id} className="h-20 w-full" />
+                </div>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="font-bold flex items-center gap-1.5">

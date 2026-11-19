@@ -1,18 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   Award,
-  Gamepad2,
   MessageSquarePlus,
   Send,
   Smartphone,
   Sparkles,
   Trophy,
 } from 'lucide-react';
+import { VirtualFishingGame } from '@/components/VirtualFishingGame';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { APP_NAME_IDEAS } from '@/data/christchurchFishingData';
 
@@ -34,14 +33,6 @@ const LEADERBOARD = [
   { rank: 5, angler: 'FeedTheGulls_NZ', catches: 3, topSpecies: '19x Gull Donations', xp: 940 },
 ];
 
-const GAME_SPECIES = [
-  { name: 'Kahawai', pts: 120, color: '#38bdf8' },
-  { name: 'Blue Cod', pts: 180, color: '#0ea5e9' },
-  { name: 'Rig (Dogfish)', pts: 200, color: '#94a3b8' },
-  { name: 'Red Gurnard', pts: 160, color: '#f43f5e' },
-  { name: 'Yellowtail Kingfish', pts: 450, color: '#eab308' },
-];
-
 export function CommunityAndGameTab({
   appName,
   onSelectAppName,
@@ -49,15 +40,6 @@ export function CommunityAndGameTab({
   appName: string;
   onSelectAppName: (name: string) => void;
 }) {
-  // Mini-game state
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [gameState, setGameState] = useState<'idle' | 'waiting' | 'bite' | 'reeling'>('idle');
-  const [tension, setTension] = useState(35);
-  const [reelProgress, setReelProgress] = useState(0);
-  const [score, setScore] = useState(0);
-  const [lastCatch, setLastCatch] = useState('Cast a line into Pegasus Bay!');
-
-  // Community posts
   const [posts, setPosts] = useState<CommunityPost[]>(() => {
     try {
       const raw = localStorage.getItem('ctfish_posts');
@@ -90,143 +72,6 @@ export function CommunityAndGameTab({
   const [postTitle, setPostTitle] = useState('');
   const [postBody, setPostBody] = useState('');
 
-  // Virtual Fishing Game timer & canvas animation
-  useEffect(() => {
-    if (gameState !== 'waiting') return;
-    const delay = 1400 + Math.random() * 2400;
-    const t = setTimeout(() => {
-      setGameState('bite');
-      setLastCatch('FISH ON! Tap REEL NOW!');
-    }, delay);
-    return () => clearTimeout(t);
-  }, [gameState]);
-
-  useEffect(() => {
-    if (gameState !== 'reeling') return;
-    const id = setInterval(() => {
-      setTension((prev) => {
-        const next = Math.max(0, prev - 4);
-        if (next === 0) {
-          setGameState('idle');
-          setLastCatch('Line went slack — fish spat the hook! Fed the gulls.');
-        }
-        return next;
-      });
-    }, 180);
-    return () => clearInterval(id);
-  }, [gameState]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let anim = 0;
-    let tick = 0;
-    const draw = () => {
-      tick += 0.05;
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      // Sky
-      const sky = ctx.createLinearGradient(0, 0, 0, h * 0.45);
-      sky.addColorStop(0, '#0f172a');
-      sky.addColorStop(1, '#1e3a8a');
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, w, h * 0.45);
-
-      // Water
-      const sea = ctx.createLinearGradient(0, h * 0.45, 0, h);
-      sea.addColorStop(0, '#0369a1');
-      sea.addColorStop(1, '#082f49');
-      ctx.fillStyle = sea;
-      ctx.fillRect(0, h * 0.45, w, h * 0.55);
-
-      // Waves
-      ctx.strokeStyle = 'rgba(186, 230, 253, 0.35)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let x = 0; x <= w; x += 12) {
-        const y = h * 0.45 + Math.sin(x * 0.04 + tick) * 3;
-        if (x === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-
-      // Rod & Line
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(30, h * 0.72);
-      ctx.lineTo(135, h * 0.32);
-      ctx.stroke();
-
-      if (gameState !== 'idle') {
-        const bobX = gameState === 'reeling' ? 320 - reelProgress * 1.6 : 320;
-        const bobY =
-          gameState === 'bite'
-            ? h * 0.48 + Math.sin(tick * 8) * 7
-            : h * 0.45 + Math.sin(tick * 2) * 3;
-
-        ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(135, h * 0.32);
-        ctx.lineTo(bobX, bobY);
-        ctx.stroke();
-
-        // Bobber
-        ctx.fillStyle = gameState === 'bite' ? '#ef4444' : '#f97316';
-        ctx.beginPath();
-        ctx.arc(bobX, bobY, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.stroke();
-      }
-
-      anim = requestAnimationFrame(draw);
-    };
-    anim = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(anim);
-  }, [gameState, reelProgress]);
-
-  const handleReelTap = () => {
-    if (gameState === 'idle') {
-      setGameState('waiting');
-      setReelProgress(0);
-      setTension(40);
-      setLastCatch('Line cast! Watching the swell...');
-      return;
-    }
-    if (gameState === 'bite') {
-      setGameState('reeling');
-      setTension(55);
-      setReelProgress(20);
-      return;
-    }
-    if (gameState === 'reeling') {
-      const nextTension = tension + 14;
-      if (nextTension > 96) {
-        setGameState('idle');
-        setLastCatch('SNAP! Line broke from too much drag!');
-        return;
-      }
-      const nextProg = reelProgress + 22;
-      setTension(nextTension);
-      if (nextProg >= 100) {
-        const caught = GAME_SPECIES[Math.floor(Math.random() * GAME_SPECIES.length)];
-        setScore((s) => s + caught.pts);
-        setGameState('idle');
-        setReelProgress(0);
-        setLastCatch(`Landed a ${caught.name}! (+${caught.pts} XP)`);
-      } else {
-        setReelProgress(nextProg);
-      }
-    }
-  };
-
   const publishPost = () => {
     if (!postTitle.trim() || !postBody.trim()) return;
     const next: CommunityPost = {
@@ -252,55 +97,9 @@ export function CommunityAndGameTab({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Virtual Fishing Mini-Game */}
-        <Card className="lg:col-span-6">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Gamepad2 className="h-5 w-5 text-primary" />
-                  Waitaha Cast & Reel (Mini-Game)
-                </CardTitle>
-                <CardDescription>Pass the time between bites — watch drag tension!</CardDescription>
-              </div>
-              <Badge className="font-mono text-sm">{score} XP</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="overflow-hidden rounded-xl border bg-slate-950">
-              <canvas ref={canvasRef} width={480} height={210} className="h-auto w-full" />
-            </div>
-            <div className="text-center text-sm font-medium text-primary">{lastCatch}</div>
-            {gameState === 'reeling' && (
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <div className="mb-1 flex justify-between">
-                    <span>Reel Progress</span>
-                    <span>{reelProgress}%</span>
-                  </div>
-                  <Progress value={reelProgress} />
-                </div>
-                <div>
-                  <div className="mb-1 flex justify-between">
-                    <span>Line Tension</span>
-                    <span className={tension > 80 ? 'text-destructive font-bold' : ''}>{tension}%</span>
-                  </div>
-                  <Progress value={tension} />
-                </div>
-              </div>
-            )}
-            <Button
-              onClick={handleReelTap}
-              variant={gameState === 'bite' ? 'destructive' : 'default'}
-              className="w-full font-bold"
-            >
-              {gameState === 'idle' && 'Cast Line'}
-              {gameState === 'waiting' && 'Waiting for Bite...'}
-              {gameState === 'bite' && 'HOOK SET — TAP TO REEL!'}
-              {gameState === 'reeling' && 'TAP TO REEL IN!'}
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="lg:col-span-6">
+          <VirtualFishingGame />
+        </div>
 
         {/* Community Catch Scoreboard */}
         <Card className="lg:col-span-6">
@@ -344,7 +143,7 @@ export function CommunityAndGameTab({
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
               <MessageSquarePlus className="h-4 w-4 text-primary" />
-              Angler Blogs & Local Spot Reports
+              Angler Blogs &amp; Local Spot Reports
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -391,7 +190,7 @@ export function CommunityAndGameTab({
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles className="h-4 w-4 text-primary" />
-              App Name Picker (14 Ideas) & App Store Roadmap
+              App Name Picker (14 Ideas) &amp; App Store Roadmap
             </CardTitle>
             <CardDescription>Click any name to preview live branding in the header</CardDescription>
           </CardHeader>
@@ -417,16 +216,16 @@ export function CommunityAndGameTab({
               ))}
             </div>
 
-            <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1.5">
+            <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3 text-xs">
               <div className="flex items-center gap-1.5 font-semibold">
                 <Smartphone className="h-4 w-4 text-primary" />
-                App Store & PWA Install Ready
+                App Store &amp; PWA Install Ready
               </div>
               <p className="text-muted-foreground">
                 Built as a mobile-first responsive web app ready for Capacitor/PWA packaging (iOS App
-                Store & Google Play) with offline species & tide caching.
+                Store &amp; Google Play) with offline species &amp; tide caching.
               </p>
-              <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
+              <div className="flex items-center gap-1.5 font-medium text-emerald-400">
                 <Award className="h-3.5 w-3.5" /> Share via QR Code in the top bar
               </div>
             </div>

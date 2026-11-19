@@ -22,6 +22,7 @@ import { SonarSplashModal } from '@/components/SonarSplashModal';
 import { SpotsMapTab } from '@/components/SpotsMapTab';
 import { TidesWeatherTab } from '@/components/TidesWeatherTab';
 import { VhfRadioDialog } from '@/components/VhfRadioDialog';
+import { VirtualFishingGame } from '@/components/VirtualFishingGame';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -29,6 +30,9 @@ import { CHRISTCHURCH_SPOTS, type FishingSpot } from '@/data/christchurchFishing
 import { fetchChristchurchWeather, getTideHeightAt, type WeatherSnapshot } from '@/lib/marineUtils';
 
 export function App() {
+  const isStandaloneGame =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('game') === '1';
+
   const [appName, setAppName] = useState("Catch'a");
   const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -89,6 +93,10 @@ export function App() {
   };
 
   const currentTide = getTideHeightAt(new Date());
+
+  if (isStandaloneGame) {
+    return <VirtualFishingGame standalone />;
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20 text-foreground md:pb-6">

@@ -351,11 +351,11 @@ export function DashboardTab({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => onNavigateTab('safety')}
+              onClick={() => window.open(`${window.location.origin}${window.location.pathname}?game=1`, '_blank', 'noopener')}
               className="w-full justify-between"
             >
               <span className="flex items-center gap-1">
-                <Gamepad2 className="h-3.5 w-3.5" /> Play &amp; Scoreboard
+                <Gamepad2 className="h-3.5 w-3.5" /> Play Mini-Game (New Tab)
               </span>
               <ArrowRight className="h-3.5 w-3.5" />
             </Button>
