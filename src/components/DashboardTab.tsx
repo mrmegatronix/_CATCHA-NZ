@@ -91,7 +91,7 @@ export function DashboardTab({
             <Button onClick={() => onNavigateTab('spots')} className="gap-1.5">
               <Compass className="h-4 w-4" /> Open Live Map
             </Button>
-            <Button variant="outline" onClick={() => onNavigateTab('cam')} className="gap-1.5">
+            <Button variant="outline" onClick={() => onNavigateTab('catch')} className="gap-1.5">
               <Video className="h-4 w-4 text-primary" /> Catcha Cam
             </Button>
           </div>
@@ -275,7 +275,7 @@ export function DashboardTab({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => onNavigateTab('cam')}
+              onClick={() => onNavigateTab('catch')}
               className="w-full justify-between"
             >
               <span>Open Catcha Cam</span>
@@ -351,7 +351,7 @@ export function DashboardTab({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => onNavigateTab('community')}
+              onClick={() => onNavigateTab('safety')}
               className="w-full justify-between"
             >
               <span className="flex items-center gap-1">

@@ -91,7 +91,7 @@ export function App() {
   const currentTide = getTideHeightAt(new Date());
 
   return (
-    <div className="min-h-screen bg-background pb-20 text-foreground md:pb-4">
+    <div className="min-h-screen bg-background pb-20 text-foreground md:pb-6">
       <SonarSplashModal
         open={splashOpen}
         onEnterWater={() => setSplashOpen(false)}
@@ -100,24 +100,24 @@ export function App() {
       />
 
       {/* Sticky Header */}
-      <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-2 px-3 py-2.5 sm:px-6">
-          <div className="flex items-center gap-2.5 min-w-0">
+      <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-2 px-3 py-2.5 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
             <button
               type="button"
               onClick={() => setActiveTab('dashboard')}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition hover:opacity-90"
-              title="Catch'a Dashboard"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-sky-600 text-slate-950 shadow-md transition hover:scale-105"
+              title="Catch'a NZ Home"
             >
               <Fish className="h-5 w-5" />
             </button>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-display truncate text-base font-extrabold tracking-tight sm:text-lg whitespace-nowrap">
+                <span className="font-display truncate text-lg font-extrabold tracking-tight whitespace-nowrap">
                   {appName}
                 </span>
-                <Badge variant="secondary" className="hidden sm:inline-flex whitespace-nowrap text-[10px] font-mono">
-                  ZONE NZ563 · CHCH
+                <Badge variant="secondary" className="hidden sm:inline-flex font-mono text-[10px] whitespace-nowrap">
+                  ŌTAUTAHI · NZ563
                 </Badge>
               </div>
               <div className="hidden font-mono text-[11px] text-muted-foreground md:block whitespace-nowrap tabular-nums">
@@ -127,7 +127,7 @@ export function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <BlinkingClock />
             <div className="hidden sm:block">
               <VhfRadioDialog />
@@ -156,29 +156,23 @@ export function App() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-[1600px] px-3 py-4 sm:px-6">
+      <main className="mx-auto max-w-[1440px] px-3 py-4 sm:px-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="hidden h-auto w-full flex-wrap justify-start gap-1 bg-muted/60 p-1 md:flex">
-            <TabsTrigger value="dashboard" className="gap-1.5 whitespace-nowrap">
+          <TabsList className="hidden h-auto w-full justify-start gap-1.5 rounded-xl bg-muted/50 p-1.5 md:flex">
+            <TabsTrigger value="dashboard" className="gap-2 rounded-lg px-4 py-2 whitespace-nowrap">
               <LayoutDashboard className="h-4 w-4" /> Dashboard
             </TabsTrigger>
-            <TabsTrigger value="spots" className="gap-1.5 whitespace-nowrap">
-              <Compass className="h-4 w-4" /> Map, Ramps &amp; Laws
+            <TabsTrigger value="spots" className="gap-2 rounded-lg px-4 py-2 whitespace-nowrap">
+              <Compass className="h-4 w-4" /> Google Map &amp; Spots
             </TabsTrigger>
-            <TabsTrigger value="tides" className="gap-1.5 whitespace-nowrap">
+            <TabsTrigger value="tides" className="gap-2 rounded-lg px-4 py-2 whitespace-nowrap">
               <Waves className="h-4 w-4" /> Tides, Weather &amp; Cams
             </TabsTrigger>
-            <TabsTrigger value="catch" className="gap-1.5 whitespace-nowrap">
-              <Fish className="h-4 w-4" /> Catch Log, ID &amp; Species
+            <TabsTrigger value="catch" className="gap-2 rounded-lg px-4 py-2 whitespace-nowrap">
+              <Camera className="h-4 w-4" /> Catcha Cam, ID &amp; Log
             </TabsTrigger>
-            <TabsTrigger value="cam" className="gap-1.5 whitespace-nowrap">
-              <Camera className="h-4 w-4" /> Catcha Cam
-            </TabsTrigger>
-            <TabsTrigger value="safety" className="gap-1.5 whitespace-nowrap">
-              <ShieldAlert className="h-4 w-4 text-destructive" /> SOS, Tsunami &amp; 3D Radar
-            </TabsTrigger>
-            <TabsTrigger value="community" className="gap-1.5 whitespace-nowrap">
-              <Trophy className="h-4 w-4" /> Community, Game &amp; Names
+            <TabsTrigger value="safety" className="gap-2 rounded-lg px-4 py-2 whitespace-nowrap">
+              <ShieldAlert className="h-4 w-4 text-destructive" /> SOS, 3D Radar &amp; Club
             </TabsTrigger>
           </TabsList>
 
@@ -206,41 +200,33 @@ export function App() {
             <TidesWeatherTab weather={weather} />
           </TabsContent>
 
-          <TabsContent value="catch">
+          <TabsContent value="catch" className="space-y-6">
+            <CatchaCamTab selectedSpot={selectedSpot} userCoords={userCoords} />
             <CatchLogAndIdTab />
           </TabsContent>
 
-          <TabsContent value="cam">
-            <CatchaCamTab selectedSpot={selectedSpot} userCoords={userCoords} />
-          </TabsContent>
-
-          <TabsContent value="safety">
+          <TabsContent value="safety" className="space-y-6">
             <SafetyAndRadar3DTab
               selectedSpot={selectedSpot}
               userCoords={userCoords}
               onRequestGps={requestGps}
             />
-          </TabsContent>
-
-          <TabsContent value="community">
             <CommunityAndGameTab appName={appName} onSelectAppName={setAppName} />
           </TabsContent>
         </Tabs>
       </main>
 
-      {/* Mobile Docked Bottom Navigation Bar */}
+      {/* Mobile Docked 5-Tab Bottom Navigation Bar */}
       <nav
         aria-label="Mobile Navigation"
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t bg-background/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-background/95 backdrop-blur-md md:hidden"
       >
         {[
           { id: 'dashboard', label: 'Home', Icon: LayoutDashboard },
           { id: 'spots', label: 'Map', Icon: Compass },
-          { id: 'tides', label: 'Tides', Icon: Waves },
-          { id: 'catch', label: 'Catch', Icon: Fish },
-          { id: 'cam', label: 'Cam', Icon: Camera },
-          { id: 'safety', label: 'SOS', Icon: ShieldAlert },
-          { id: 'community', label: 'Club', Icon: Trophy },
+          { id: 'tides', label: 'Weather', Icon: Waves },
+          { id: 'catch', label: 'Cam & ID', Icon: Camera },
+          { id: 'safety', label: 'SOS/Club', Icon: Trophy },
         ].map(({ id, label, Icon }) => {
           const active = activeTab === id;
           return (
@@ -248,11 +234,11 @@ export function App() {
               key={id}
               type="button"
               onClick={() => setActiveTab(id)}
-              className={`flex min-h-[54px] flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium transition ${
+              className={`flex min-h-[56px] flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-medium transition ${
                 active ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
-              <Icon className={`h-4 w-4 ${id === 'safety' && !active ? 'text-destructive' : ''}`} />
+              <Icon className="h-5 w-5" />
               <span className="whitespace-nowrap">{label}</span>
             </button>
           );
