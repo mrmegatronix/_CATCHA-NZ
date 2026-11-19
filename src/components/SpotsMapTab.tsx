@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
 import {
   Anchor,
   Compass,
@@ -6,8 +7,10 @@ import {
   Eye,
   EyeOff,
   FileText,
+  Layers,
   LocateFixed,
   MapPin,
+  Minus,
   Navigation,
   Plus,
   ShieldAlert,
@@ -45,26 +48,7 @@ interface SpotsMapTabProps {
   gpsStatus: string;
 }
 
-// Map bounding box covering Canterbury: Waimakariri (-43.35) to Rakaia (-43.93), 172.15 to 173.12
-const LAT_MAX = -43.33;
-const LAT_MIN = -43.95;
-const LNG_MIN = 172.15;
-const LNG_MAX = 173.12;
-
-function toSvgCoords(lat: number, lng: number) {
-  const x = ((lng - LNG_MIN) / (LNG_MAX - LNG_MIN)) * 600;
-  const y = ((LAT_MAX - lat) / (LAT_MAX - LAT_MIN)) * 400;
-  return {
-    x: Math.max(12, Math.min(588, x)),
-    y: Math.max(12, Math.min(388, y)),
-  };
-}
-
-function fromSvgCoords(x: number, y: number) {
-  const lng = LNG_MIN + (x / 600) * (LNG_MAX - LNG_MIN);
-  const lat = LAT_MAX - (y / 400) * (LAT_MAX - LAT_MIN);
-  return { lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)) };
-}
+type MapStyle = 'dark' | 'street' | 'satellite';
 
 export function SpotsMapTab({
   selectedSpot,
@@ -73,6 +57,18 @@ export function SpotsMapTab({
   onRequestGps,
   gpsStatus,
 }: SpotsMapTabProps) {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const baseLayerRef = useRef<L.TileLayer | null>(null);
+  const seamarkLayerRef = useRef<L.TileLayer | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+
+  const [mapStyle, setMapStyle] = useState<MapStyle>('dark');
+  const [showSeamarks, setShowSeamarks] = useState(true);
+  const [showRamps, setShowRamps] = useState(true);
+  const [showAis, setShowAis] = useState(true);
+  const [showReserves, setShowReserves] = useState(true);
+
   const [markers, setMarkers] = useState<CustomMarker[]>(() => {
     try {
       const raw = localStorage.getItem('ctfish_markers');
@@ -93,7 +89,7 @@ export function SpotsMapTab({
     try {
       localStorage.setItem('ctfish_markers', JSON.stringify(next));
     } catch {
-      // ignore storage errors
+      // ignore
     }
   };
 
@@ -102,8 +98,8 @@ export function SpotsMapTab({
     const next: CustomMarker = {
       id: `${Date.now()}`,
       label,
-      lat,
-      lng,
+      lat: Number(lat.toFixed(4)),
+      lng: Number(lng.toFixed(4)),
       note: markerNote.trim() || 'Marked fishing spot',
       createdAt: new Date().toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' }),
     };
@@ -112,35 +108,223 @@ export function SpotsMapTab({
     setMarkerNote('');
   };
 
-  const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 600;
-    const y = ((e.clientY - rect.top) / rect.height) * 400;
-    const coords = fromSvgCoords(x, y);
-    dropMarkerAt(coords.lat, coords.lng);
-  };
+  // Initialize Leaflet Map
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+    const map = L.map(mapContainerRef.current, {
+      center: [selectedSpot.lat, selectedSpot.lng],
+      zoom: 11,
+      zoomControl: false,
+    });
+
+    const group = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    markersLayerRef.current = group;
+
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      dropMarkerAt(e.latlng.lat, e.latlng.lng);
+    });
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Update Base Tile Layer & Seamarks
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (baseLayerRef.current) {
+      map.removeLayer(baseLayerRef.current);
+    }
+
+    const tileUrls: Record<MapStyle, { url: string; attr: string }> = {
+      dark: {
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attr: '&copy; OpenStreetMap &copy; CARTO',
+      },
+      street: {
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attr: '&copy; OpenStreetMap contributors',
+      },
+      satellite: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr: '&copy; Esri World Imagery',
+      },
+    };
+
+    const chosen = tileUrls[mapStyle];
+    baseLayerRef.current = L.tileLayer(chosen.url, {
+      attribution: chosen.attr,
+      maxZoom: 18,
+    }).addTo(map);
+
+    if (seamarkLayerRef.current) {
+      map.removeLayer(seamarkLayerRef.current);
+      seamarkLayerRef.current = null;
+    }
+
+    if (showSeamarks) {
+      seamarkLayerRef.current = L.tileLayer(
+        'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+        { maxZoom: 18, opacity: 0.85 }
+      ).addTo(map);
+    }
+  }, [mapStyle, showSeamarks]);
+
+  // Center map when selectedSpot changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map) {
+      map.panTo([selectedSpot.lat, selectedSpot.lng], { animate: true });
+    }
+  }, [selectedSpot]);
 
   const filteredSpots =
     filterType === 'all' ? CHRISTCHURCH_SPOTS : CHRISTCHURCH_SPOTS.filter((s) => s.type === filterType);
+
+  // Render Markers, Ramps, AIS, Reserves
+  useEffect(() => {
+    const group = markersLayerRef.current;
+    if (!group) return;
+    group.clearLayers();
+
+    // Marine Reserves & Mataitai Zones
+    if (showReserves) {
+      // Akaroa Marine Reserve (approx outer harbour no-take zone)
+      L.polygon(
+        [
+          [-43.875, 172.942],
+          [-43.885, 172.968],
+          [-43.855, 172.978],
+          [-43.848, 172.952],
+        ],
+        {
+          color: '#ef4444',
+          weight: 2,
+          fillColor: '#ef4444',
+          fillOpacity: 0.18,
+          dashArray: '4 4',
+        }
+      )
+        .bindPopup('<strong>Akaroa Marine Reserve</strong><br/>Strict No-Take Zone')
+        .addTo(group);
+
+      // Whakaraupo / Lyttelton Mataitai Zone
+      L.circle([-43.612, 172.695], {
+        radius: 2100,
+        color: '#f59e0b',
+        weight: 1.5,
+        fillColor: '#f59e0b',
+        fillOpacity: 0.1,
+        dashArray: '6 4',
+      })
+        .bindPopup('<strong>Whakaraupō Mātaitai</strong><br/>Customary & special bag limits apply')
+        .addTo(group);
+    }
+
+    // Fishing Spots
+    filteredSpots.forEach((spot) => {
+      const isSelected = spot.id === selectedSpot.id;
+      const color =
+        spot.biteStatus === 'prime'
+          ? '#10b981'
+          : spot.biteStatus === 'moderate'
+            ? '#fbbf24'
+            : '#f97316';
+
+      const marker = L.circleMarker([spot.lat, spot.lng], {
+        radius: isSelected ? 10 : 7,
+        color: isSelected ? '#22d3ee' : '#000f21',
+        weight: isSelected ? 3 : 2,
+        fillColor: color,
+        fillOpacity: 0.95,
+      });
+
+      marker.bindTooltip(`${spot.name} (${spot.depthRange})`, { direction: 'top' });
+      marker.on('click', () => onSelectSpot(spot));
+      marker.addTo(group);
+    });
+
+    // Boat Ramps
+    if (showRamps) {
+      BOAT_RAMPS.forEach((ramp) => {
+        L.circleMarker([ramp.lat, ramp.lng], {
+          radius: 5,
+          color: '#ffffff',
+          weight: 1.5,
+          fillColor: '#38bdf8',
+          fillOpacity: 0.9,
+        })
+          .bindPopup(`<strong>Ramp: ${ramp.name}</strong><br/>${ramp.lanes} lanes · ${ramp.tideAccess}`)
+          .addTo(group);
+      });
+    }
+
+    // AIS Vessels
+    if (showAis) {
+      AIS_VESSELS.forEach((v) => {
+        const marker = L.circleMarker([v.lat, v.lng], {
+          radius: 6,
+          color: '#ffffff',
+          weight: 1.5,
+          fillColor: v.color,
+          fillOpacity: 0.95,
+        });
+        marker.bindTooltip(`AIS: ${v.name} (${v.speedKn} kn)`, { direction: 'right' });
+        marker.on('click', () => setActiveVessel(v));
+        marker.addTo(group);
+      });
+    }
+
+    // User Dropped Markers
+    markers.forEach((m) => {
+      L.circleMarker([m.lat, m.lng], {
+        radius: 6,
+        color: '#ffffff',
+        weight: 2,
+        fillColor: '#a855f7',
+        fillOpacity: 0.95,
+      })
+        .bindPopup(`<strong>${m.label}</strong><br/>${m.note}`)
+        .addTo(group);
+    });
+
+    // User GPS Marker
+    if (userCoords) {
+      L.circleMarker([userCoords.lat, userCoords.lng], {
+        radius: 8,
+        color: '#ffffff',
+        weight: 2,
+        fillColor: '#ef4444',
+        fillOpacity: 1,
+      })
+        .bindPopup('<strong>Your GPS Location</strong>')
+        .addTo(group);
+    }
+  }, [filteredSpots, selectedSpot, showRamps, showAis, showReserves, markers, userCoords, onSelectSpot]);
 
   const maskCoord = (val: number) => (spotSaverPrivacy ? `${val.toFixed(1)}**` : val.toFixed(4));
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-      {/* Interactive Bathymetric & GPS Map */}
+      {/* Interactive Leaflet Map & Controls */}
       <Card className="lg:col-span-7">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Compass className="h-5 w-5 text-primary" />
-                Canterbury GPS & Depth Chart
+                Canterbury Interactive Marine Map
               </CardTitle>
               <CardDescription>
-                Click anywhere on the chart to drop a location marker · Bathymetry contours in metres
+                Pan, zoom, toggle nautical seamarks &amp; tap anywhere to drop a GPS pin
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Button
                 size="sm"
                 variant="outline"
@@ -148,198 +332,97 @@ export function SpotsMapTab({
                 className="gap-1.5 whitespace-nowrap"
               >
                 {spotSaverPrivacy ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {spotSaverPrivacy ? 'GPS Hidden' : 'Spot Saver'}
+                <span className="hidden sm:inline">{spotSaverPrivacy ? 'GPS Hidden' : 'Spot Saver'}</span>
               </Button>
               <Button size="sm" onClick={onRequestGps} className="gap-1.5 whitespace-nowrap">
                 <LocateFixed className="h-4 w-4" />
-                {gpsStatus === 'locked' ? 'GPS Locked' : 'Get GPS'}
+                {gpsStatus === 'locked' ? 'GPS Locked' : 'My GPS'}
               </Button>
             </div>
           </div>
+
+          {/* Map Layer & Overlay Controls */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-0.5">
+              <Layers className="ml-1.5 h-3.5 w-3.5 text-muted-foreground" />
+              {(['dark', 'street', 'satellite'] as const).map((st) => (
+                <Button
+                  key={st}
+                  size="xs"
+                  variant={mapStyle === st ? 'default' : 'ghost'}
+                  onClick={() => setMapStyle(st)}
+                  className="capitalize"
+                >
+                  {st}
+                </Button>
+              ))}
+            </div>
+            <Button
+              size="xs"
+              variant={showSeamarks ? 'default' : 'outline'}
+              onClick={() => setShowSeamarks((v) => !v)}
+            >
+              Nautical
+            </Button>
+            <Button
+              size="xs"
+              variant={showRamps ? 'default' : 'outline'}
+              onClick={() => setShowRamps((v) => !v)}
+            >
+              Ramps
+            </Button>
+            <Button
+              size="xs"
+              variant={showAis ? 'default' : 'outline'}
+              onClick={() => setShowAis((v) => !v)}
+            >
+              AIS
+            </Button>
+            <Button
+              size="xs"
+              variant={showReserves ? 'destructive' : 'outline'}
+              onClick={() => setShowReserves((v) => !v)}
+            >
+              Reserves
+            </Button>
+          </div>
         </CardHeader>
+
         <CardContent className="space-y-3">
           <div className="relative overflow-hidden rounded-xl border bg-slate-950">
-            <svg
-              viewBox="0 0 600 400"
-              onClick={handleSvgClick}
-              className="h-auto w-full cursor-crosshair select-none"
-              role="img"
-              aria-label="Christchurch & Banks Peninsula Interactive Fishing Map"
-            >
-              {/* Ocean background & bathymetry contours */}
-              <defs>
-                <linearGradient id="oceanGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#082f49" />
-                  <stop offset="100%" stopColor="#020617" />
-                </linearGradient>
-              </defs>
-              <rect width="600" height="400" fill="url(#oceanGrad)" />
+            <div ref={mapContainerRef} className="h-[340px] w-full sm:h-[410px] z-0" />
 
-              {/* Depth Contours */}
-              <path
-                d="M 330,0 Q 370,130 430,190 T 560,310 L 600,310 L 600,0 Z"
-                fill="#0c4a6e"
-                opacity="0.45"
-              />
-              <path
-                d="M 390,0 Q 430,120 490,180 T 600,260 L 600,0 Z"
-                fill="#0369a1"
-                opacity="0.25"
-              />
-              <text x="415" y="65" fill="#7dd3fc" fontSize="10" opacity="0.7">
-                15m Contour
-              </text>
-              <text x="495" y="120" fill="#38bdf8" fontSize="10" opacity="0.7">
-                30m+ Shelf
-              </text>
-
-              {/* Canterbury Plains & Banks Peninsula Landmass */}
-              <path
-                d="M 0,0 L 345,0 Q 355,60 365,120 Q 385,155 435,165 Q 505,175 535,235 Q 545,285 495,315 Q 435,325 365,280 Q 275,270 155,345 L 40,400 L 0,400 Z"
-                fill="#1e293b"
-                stroke="#475569"
-                strokeWidth="2"
-              />
-              {/* Lake Ellesmere / Te Waihora */}
-              <ellipse cx="140" cy="295" rx="48" ry="22" fill="#0e7490" opacity="0.7" stroke="#38bdf8" strokeWidth="1" />
-              <text x="115" y="298" fill="#bae6fd" fontSize="9">
-                Te Waihora
-              </text>
-
-              {/* Lyttelton Harbour Cutout */}
-              <path
-                d="M 380,180 Q 345,178 320,188 Q 348,198 388,195 Z"
-                fill="#0284c7"
-                opacity="0.85"
-              />
-              {/* Akaroa Harbour Cutout */}
-              <path
-                d="M 485,308 Q 492,265 502,248 Q 512,268 504,310 Z"
-                fill="#0284c7"
-                opacity="0.85"
-              />
-
-              {/* Land labels */}
-              <text x="210" y="130" fill="#94a3b8" fontSize="13" fontWeight="600">
-                CHRISTCHURCH
-              </text>
-              <text x="405" y="235" fill="#94a3b8" fontSize="10" fontWeight="600">
-                BANKS PENINSULA
-              </text>
-              <text x="410" y="35" fill="#38bdf8" fontSize="11" opacity="0.8">
-                Pegasus Bay
-              </text>
-
-              {/* Fishing Spot Pins */}
-              {filteredSpots.map((spot) => {
-                const { x, y } = toSvgCoords(spot.lat, spot.lng);
-                const isSelected = spot.id === selectedSpot.id;
-                const statusColor =
-                  spot.biteStatus === 'prime'
-                    ? '#10b981'
-                    : spot.biteStatus === 'moderate'
-                      ? '#fbbf24'
-                      : '#f97316';
-                const showLabel =
-                  isSelected ||
-                  spot.id === 'waimakariri-mouth' ||
-                  spot.id === 'rakaia-mouth' ||
-                  spot.id === 'akaroa-harbour';
-                const alignLeft = x > 430;
-                return (
-                  <g
-                    key={spot.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectSpot(spot);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <title>{spot.name} ({spot.depthRange})</title>
-                    {isSelected && (
-                      <circle cx={x} cy={y} r="14" fill="#22d3ee" opacity="0.28" />
-                    )}
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r={isSelected ? 7 : 5}
-                      fill={isSelected ? '#22d3ee' : statusColor}
-                      stroke="#000f21"
-                      strokeWidth="2"
-                    />
-                    {showLabel && (
-                      <text
-                        x={alignLeft ? x - 10 : x + 9}
-                        y={y + 3}
-                        textAnchor={alignLeft ? 'end' : 'start'}
-                        fill={isSelected ? '#ffffff' : '#cbd5e1'}
-                        fontSize={isSelected ? '11' : '9'}
-                        fontWeight={isSelected ? '700' : '500'}
-                      >
-                        {spot.name.split(' (')[0]}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-
-              {/* AIS Vessel Overlay */}
-              {AIS_VESSELS.map((v) => {
-                const { x, y } = toSvgCoords(v.lat, v.lng);
-                return (
-                  <g
-                    key={v.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveVessel(v);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <polygon
-                      points={`${x},${y - 6} ${x + 5},${y + 5} ${x - 5},${y + 5}`}
-                      fill={v.color}
-                      stroke="#ffffff"
-                      strokeWidth="1"
-                      transform={`rotate(${v.headingDeg} ${x} ${y})`}
-                    />
-                  </g>
-                );
-              })}
-
-              {/* Custom User Dropped Markers */}
-              {markers.map((m) => {
-                const { x, y } = toSvgCoords(m.lat, m.lng);
-                return (
-                  <g key={m.id}>
-                    <circle cx={x} cy={y} r="5" fill="#10b981" stroke="#fff" strokeWidth="1.5" />
-                    <text x={x + 7} y={y - 4} fill="#6ee7b7" fontSize="9" fontWeight="600">
-                      {m.label}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* User GPS Live Marker */}
-              {userCoords && (
-                <g>
-                  <circle
-                    cx={toSvgCoords(userCoords.lat, userCoords.lng).x}
-                    cy={toSvgCoords(userCoords.lat, userCoords.lng).y}
-                    r="10"
-                    fill="#ef4444"
-                    opacity="0.3"
-                  />
-                  <circle
-                    cx={toSvgCoords(userCoords.lat, userCoords.lng).x}
-                    cy={toSvgCoords(userCoords.lat, userCoords.lng).y}
-                    r="5"
-                    fill="#ef4444"
-                    stroke="#fff"
-                    strokeWidth="2"
-                  />
-                </g>
-              )}
-            </svg>
+            {/* Floating Map Zoom & Center Controls */}
+            <div className="absolute right-2.5 top-2.5 z-[400] flex flex-col gap-1">
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-9 w-9 shadow-md"
+                onClick={() => mapRef.current?.zoomIn()}
+                aria-label="Zoom in"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-9 w-9 shadow-md"
+                onClick={() => mapRef.current?.zoomOut()}
+                aria-label="Zoom out"
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-9 w-9 shadow-md"
+                onClick={() => mapRef.current?.setView([selectedSpot.lat, selectedSpot.lng], 12)}
+                aria-label="Center on spot"
+                title="Center on Selected Spot"
+              >
+                <Navigation className="h-4 w-4 text-primary" />
+              </Button>
+            </div>
           </div>
 
           {activeVessel && (
@@ -397,7 +480,7 @@ export function SpotsMapTab({
             <div className="flex flex-wrap gap-2">
               {markers.map((m) => (
                 <Badge key={m.id} variant="secondary" className="gap-1.5 py-1 pr-1.5">
-                  <MapPin className="h-3 w-3 text-emerald-500" />
+                  <MapPin className="h-3 w-3 text-purple-400" />
                   <span>
                     {m.label} ({maskCoord(m.lat)}, {maskCoord(m.lng)})
                   </span>
@@ -420,8 +503,8 @@ export function SpotsMapTab({
       <div className="space-y-4 lg:col-span-5">
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">Christchurch Hotspots</CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-base">Christchurch Hotspots ({filteredSpots.length})</CardTitle>
               <div className="flex flex-wrap gap-1">
                 {(['all', 'pier', 'surf', 'harbour', 'river', 'lake'] as const).map((t) => (
                   <Button
@@ -471,7 +554,7 @@ export function SpotsMapTab({
           <CardHeader className="pb-2">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <CardTitle className="flex items-center gap-2 text-lg">
+                <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
                   <span>{selectedSpot.name}</span>
                   <Badge
                     variant={selectedSpot.biteStatus === 'prime' ? 'default' : 'secondary'}
@@ -509,24 +592,24 @@ export function SpotsMapTab({
             {drawerExpanded && (
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5">
-                  <div className="text-[11px] text-amber-400 font-medium">Solunar Window</div>
+                  <div className="text-[11px] font-medium text-amber-400">Solunar Window</div>
                   <div className="font-mono text-sm font-bold">{selectedSpot.solunarRating}% Prime</div>
                 </div>
                 <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 p-2.5">
-                  <div className="text-[11px] text-cyan-400 font-medium">Surface Temp &amp; Vis</div>
+                  <div className="text-[11px] font-medium text-cyan-400">Surface Temp &amp; Vis</div>
                   <div className="font-mono text-sm font-bold">
                     {selectedSpot.sstC}°C · {selectedSpot.clarityM}m
                   </div>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-2.5">
                   <div className="text-[11px] text-muted-foreground">Depth &amp; Bar Chop</div>
-                  <div className="font-medium text-xs">
+                  <div className="text-xs font-medium">
                     {selectedSpot.depthRange} · {selectedSpot.barChopM}m chop
                   </div>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-2.5">
                   <div className="text-[11px] text-muted-foreground">Best Tide</div>
-                  <div className="font-medium text-xs">{selectedSpot.bestTide}</div>
+                  <div className="text-xs font-medium">{selectedSpot.bestTide}</div>
                 </div>
               </div>
             )}
@@ -569,7 +652,7 @@ export function SpotsMapTab({
             {BOAT_RAMPS.map((ramp) => (
               <div key={ramp.id} className="rounded-lg border p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold truncate">{ramp.name}</span>
+                  <span className="truncate font-semibold">{ramp.name}</span>
                   <Badge variant="outline" className="shrink-0">
                     {ramp.lanes} {ramp.lanes > 1 ? 'Lanes' : 'Lane'}
                   </Badge>
@@ -588,18 +671,18 @@ export function SpotsMapTab({
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
             <FileText className="h-4 w-4 text-primary" />
-            Local Laws & Licence Purchasing
+            Local Laws &amp; Licence Purchasing
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5">
-            <div className="font-semibold flex items-center gap-1.5">
+          <div className="space-y-1.5 rounded-lg border bg-muted/40 p-3">
+            <div className="flex items-center gap-1.5 font-semibold">
               <Waves className="h-4 w-4 text-primary" />
               MPI South-East Marine Rules
             </div>
             <p className="text-xs text-muted-foreground">
               Combined daily limit: <strong>30 finfish</strong> per fisher. Stricter limits apply in Whakaraupō
-              Mātaitai (Lyttelton Harbour). No-take in Akaroa & Pohatu Marine Reserves.
+              Mātaitai (Lyttelton Harbour). No-take in Akaroa &amp; Pohatu Marine Reserves.
             </p>
             <a
               href="https://www.mpi.govt.nz/fishing-aquaculture/recreational-fishing/fishing-rules/"
@@ -610,10 +693,10 @@ export function SpotsMapTab({
               Official MPI NZ Fishing Rules <ExternalLink className="h-3 w-3" />
             </a>
           </div>
-          <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
-            <div className="font-semibold">Freshwater Trout & Salmon Licences</div>
+          <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
+            <div className="font-semibold">Freshwater Trout &amp; Salmon Licences</div>
             <p className="text-xs text-muted-foreground">
-              Required for Waimakariri, Rakaia & all North Canterbury rivers/lakes. Sea-Run Salmon Endorsement
+              Required for Waimakariri, Rakaia &amp; all North Canterbury rivers/lakes. Sea-Run Salmon Endorsement
               required for Chinook Salmon.
             </p>
             <a
@@ -623,7 +706,7 @@ export function SpotsMapTab({
               className="inline-block"
             >
               <Button size="sm" className="gap-1.5">
-                Buy Fish & Game NZ Licence <ExternalLink className="h-3.5 w-3.5" />
+                Buy Fish &amp; Game NZ Licence <ExternalLink className="h-3.5 w-3.5" />
               </Button>
             </a>
           </div>

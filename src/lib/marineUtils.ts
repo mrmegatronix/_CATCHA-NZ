@@ -21,26 +21,45 @@ export interface TideEvent {
   dayLabel: string;
 }
 
-export interface WeatherSnapshot {
+export interface HourlyWeatherPoint {
+  time: string;
   tempC: number;
   windKmh: number;
+  gustKmh: number;
+  rainPct: number;
+}
+
+export interface WeatherSnapshot {
+  tempC: number;
+  feelsLikeC: number;
+  humidityPct: number;
+  windKmh: number;
+  gustKmh: number;
   windDir: string;
   swellM: number;
+  swellPeriodS: number;
+  swellDir: string;
+  sstC: number;
   pressureHpa: number;
+  uvIndex: number;
+  visibilityKm: number;
+  sunrise: string;
+  sunset: string;
   condition: string;
   source: 'open-meteo' | 'fallback';
+  hourly: HourlyWeatherPoint[];
   forecast: Array<{
     day: string;
     highC: number;
     lowC: number;
     windKmh: number;
+    rainPct: number;
     condition: string;
   }>;
 }
 
 export function getMoonInfo(date: Date = new Date()): MoonInfo {
   const synodicMonth = 29.53058867;
-  // Known New Moon reference: 2000-01-06 18:14 UTC
   const ref = Date.UTC(2000, 0, 6, 18, 14, 0);
   const diffDays = (date.getTime() - ref) / 86400000;
   const age = ((diffDays % synodicMonth) + synodicMonth) % synodicMonth;
@@ -89,7 +108,6 @@ export function getMoonInfo(date: Date = new Date()): MoonInfo {
   };
 }
 
-// Semi-diurnal harmonic tide approximation for Lyttelton / Pegasus Bay (range ~0.4m to 2.5m)
 export function getTideHeightAt(date: Date): number {
   const hoursSinceRef = (date.getTime() - Date.UTC(2026, 0, 1, 0, 0, 0)) / 3600000;
   const m2Period = 12.4206;
@@ -161,59 +179,127 @@ export function degToCompass(deg: number): string {
 }
 
 export async function fetchChristchurchWeather(): Promise<WeatherSnapshot> {
+  const fallbackHourly: HourlyWeatherPoint[] = [
+    { time: '06:00', tempC: 12, windKmh: 12, gustKmh: 18, rainPct: 10 },
+    { time: '09:00', tempC: 15, windKmh: 15, gustKmh: 22, rainPct: 10 },
+    { time: '12:00', tempC: 18, windKmh: 19, gustKmh: 27, rainPct: 15 },
+    { time: '15:00', tempC: 19, windKmh: 22, gustKmh: 31, rainPct: 20 },
+    { time: '18:00', tempC: 16, windKmh: 17, gustKmh: 24, rainPct: 15 },
+    { time: '21:00', tempC: 13, windKmh: 11, gustKmh: 16, rainPct: 5 },
+  ];
+
   const fallback: WeatherSnapshot = {
     tempC: 16,
+    feelsLikeC: 15,
+    humidityPct: 72,
     windKmh: 18,
+    gustKmh: 26,
     windDir: 'NE',
     swellM: 1.1,
+    swellPeriodS: 8.5,
+    swellDir: 'E',
+    sstC: 15.6,
     pressureHpa: 1016,
+    uvIndex: 4.2,
+    visibilityKm: 18,
+    sunrise: '06:04',
+    sunset: '20:38',
     condition: 'Partly Cloudy · Light NE Sea Breeze',
     source: 'fallback',
+    hourly: fallbackHourly,
     forecast: [
-      { day: 'Today', highC: 18, lowC: 9, windKmh: 18, condition: 'Partly Cloudy' },
-      { day: 'Tomorrow', highC: 20, lowC: 10, windKmh: 14, condition: 'Clear & Calm' },
-      { day: 'Day 3', highC: 22, lowC: 11, windKmh: 24, condition: 'Nor’Wester' },
-      { day: 'Day 4', highC: 15, lowC: 8, windKmh: 28, condition: 'Southerly Change' },
-      { day: 'Day 5', highC: 17, lowC: 9, windKmh: 12, condition: 'Fine Morning' },
+      { day: 'Today', highC: 18, lowC: 9, windKmh: 18, rainPct: 15, condition: 'Partly Cloudy' },
+      { day: 'Tomorrow', highC: 20, lowC: 10, windKmh: 14, rainPct: 5, condition: 'Clear & Calm' },
+      { day: 'Day 3', highC: 22, lowC: 11, windKmh: 24, rainPct: 10, condition: 'Nor’Wester' },
+      { day: 'Day 4', highC: 15, lowC: 8, windKmh: 28, rainPct: 45, condition: 'Southerly Change' },
+      { day: 'Day 5', highC: 17, lowC: 9, windKmh: 12, rainPct: 10, condition: 'Fine Morning' },
     ],
   };
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
-    const url =
-      'https://api.open-meteo.com/v1/forecast?latitude=-43.5321&longitude=172.6362&current=temperature_2m,wind_speed_10m,wind_direction_10m,surface_pressure&daily=temperature_2m_max,temperature_2m_min,wind_speed_10m_max&timezone=Pacific%2FAuckland&forecast_days=5';
-    const res = await fetch(url, { signal: controller.signal });
+    const timer = setTimeout(() => controller.abort(), 4000);
+    const weatherUrl =
+      'https://api.open-meteo.com/v1/forecast?latitude=-43.5321&longitude=172.6362&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure&hourly=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation_probability,uv_index,visibility&daily=temperature_2m_max,temperature_2m_min,wind_speed_10m_max,precipitation_probability_max,sunrise,sunset&timezone=Pacific%2FAuckland&forecast_days=5';
+    const marineUrl =
+      'https://marine-api.open-meteo.com/v1/marine?latitude=-43.55&longitude=172.80&current=wave_height,wave_period,wave_direction,sea_surface_temperature';
+
+    const [wRes, mRes] = await Promise.all([
+      fetch(weatherUrl, { signal: controller.signal }),
+      fetch(marineUrl, { signal: controller.signal }).catch(() => null),
+    ]);
     clearTimeout(timer);
-    if (!res.ok) return fallback;
-    const data = await res.json();
+
+    if (!wRes.ok) return fallback;
+    const data = await wRes.json();
+    const mData = mRes && mRes.ok ? await mRes.json() : null;
+
     const cur = data.current;
     const daily = data.daily;
+    const hourlyRaw = data.hourly;
+    const mCur = mData?.current;
+
     const windDir = degToCompass(cur?.wind_direction_10m ?? 45);
     const windKmh = Math.round(cur?.wind_speed_10m ?? 18);
-    const swellM = Number(Math.max(0.4, Math.min(3.5, windKmh * 0.055)).toFixed(1));
+    const gustKmh = Math.round(cur?.wind_gusts_10m ?? windKmh + 8);
+    const swellM = Number(
+      (mCur?.wave_height ?? Math.max(0.4, Math.min(3.5, windKmh * 0.055))).toFixed(1)
+    );
+    const swellPeriodS = Number((mCur?.wave_period ?? 8.2).toFixed(1));
+    const swellDir = degToCompass(mCur?.wave_direction ?? 90);
+    const sstC = Number((mCur?.sea_surface_temperature ?? 15.6).toFixed(1));
+
+    const hourly: HourlyWeatherPoint[] = (hourlyRaw?.time ?? [])
+      .slice(0, 12)
+      .filter((_: string, i: number) => i % 2 === 0)
+      .map((iso: string, idx: number) => {
+        const realIdx = idx * 2;
+        return {
+          time: iso.slice(11, 16),
+          tempC: Math.round(hourlyRaw.temperature_2m?.[realIdx] ?? 16),
+          windKmh: Math.round(hourlyRaw.wind_speed_10m?.[realIdx] ?? 16),
+          gustKmh: Math.round(hourlyRaw.wind_gusts_10m?.[realIdx] ?? 22),
+          rainPct: Math.round(hourlyRaw.precipitation_probability?.[realIdx] ?? 10),
+        };
+      });
 
     const forecast = (daily?.time ?? []).slice(0, 5).map((iso: string, idx: number) => {
       const d = new Date(iso);
       const label = idx === 0 ? 'Today' : d.toLocaleDateString('en-NZ', { weekday: 'short' });
       const w = Math.round(daily.wind_speed_10m_max?.[idx] ?? 15);
+      const r = Math.round(daily.precipitation_probability_max?.[idx] ?? 10);
       return {
         day: label,
         highC: Math.round(daily.temperature_2m_max?.[idx] ?? 18),
         lowC: Math.round(daily.temperature_2m_min?.[idx] ?? 9),
         windKmh: w,
-        condition: w > 28 ? 'Gusty Winds' : w < 16 ? 'Calm Window' : 'Moderate Breeze',
+        rainPct: r,
+        condition: r > 50 ? 'Showers' : w > 28 ? 'Gusty Winds' : w < 16 ? 'Calm Window' : 'Moderate Breeze',
       };
     });
 
+    const visMeters = hourlyRaw?.visibility?.[0] ?? 18000;
+    const uvNow = hourlyRaw?.uv_index?.[0] ?? 4.0;
+
     return {
       tempC: Math.round(cur?.temperature_2m ?? 16),
+      feelsLikeC: Math.round(cur?.apparent_temperature ?? cur?.temperature_2m ?? 15),
+      humidityPct: Math.round(cur?.relative_humidity_2m ?? 72),
       windKmh,
+      gustKmh,
       windDir,
       swellM,
+      swellPeriodS,
+      swellDir,
+      sstC,
       pressureHpa: Math.round(cur?.surface_pressure ?? 1016),
+      uvIndex: Number(Number(uvNow).toFixed(1)),
+      visibilityKm: Math.round(visMeters / 1000),
+      sunrise: daily?.sunrise?.[0]?.slice(11, 16) ?? '06:04',
+      sunset: daily?.sunset?.[0]?.slice(11, 16) ?? '20:38',
       condition: `Live Open-Meteo · ${windDir} ${windKmh} km/h`,
       source: 'open-meteo',
+      hourly: hourly.length > 0 ? hourly : fallbackHourly,
       forecast: forecast.length > 0 ? forecast : fallback.forecast,
     };
   } catch {

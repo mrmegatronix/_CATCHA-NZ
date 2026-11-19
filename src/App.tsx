@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-  Anchor,
   Camera,
   Compass,
   Fish,
+  LayoutDashboard,
   Moon,
   Radar,
   ShieldAlert,
@@ -15,6 +15,7 @@ import { BlinkingClock } from '@/components/BlinkingClock';
 import { CatchaCamTab } from '@/components/CatchaCamTab';
 import { CatchLogAndIdTab } from '@/components/CatchLogAndIdTab';
 import { CommunityAndGameTab } from '@/components/CommunityAndGameTab';
+import { DashboardTab } from '@/components/DashboardTab';
 import { SafetyAndRadar3DTab } from '@/components/SafetyAndRadar3DTab';
 import { ShareQrDialog } from '@/components/ShareQrDialog';
 import { SonarSplashModal } from '@/components/SonarSplashModal';
@@ -30,19 +31,30 @@ import { fetchChristchurchWeather, getTideHeightAt, type WeatherSnapshot } from 
 export function App() {
   const [appName, setAppName] = useState("Catch'a");
   const [darkMode, setDarkMode] = useState(true);
-  const [activeTab, setActiveTab] = useState('spots');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [splashOpen, setSplashOpen] = useState(false);
   const [selectedSpot, setSelectedSpot] = useState<FishingSpot>(CHRISTCHURCH_SPOTS[0]);
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'locked' | 'error'>('idle');
   const [weather, setWeather] = useState<WeatherSnapshot>({
     tempC: 16,
+    feelsLikeC: 15,
+    humidityPct: 72,
     windKmh: 18,
+    gustKmh: 26,
     windDir: 'NE',
     swellM: 1.1,
+    swellPeriodS: 8.5,
+    swellDir: 'E',
+    sstC: 15.6,
     pressureHpa: 1016,
+    uvIndex: 4.2,
+    visibilityKm: 18,
+    sunrise: '06:04',
+    sunset: '20:38',
     condition: 'Loading Christchurch marine...',
     source: 'fallback',
+    hourly: [],
     forecast: [],
   });
 
@@ -69,7 +81,6 @@ export function App() {
         setGpsStatus('locked');
       },
       () => {
-        // Fallback to Christchurch centre if permission denied
         setUserCoords({ lat: -43.5321, lng: 172.6362 });
         setGpsStatus('error');
       },
@@ -94,11 +105,11 @@ export function App() {
           <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
-              onClick={() => setSplashOpen(true)}
+              onClick={() => setActiveTab('dashboard')}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition hover:opacity-90"
-              title="Open Sonar Launch HUD"
+              title="Catch'a Dashboard"
             >
-              <Anchor className="h-5 w-5" />
+              <Fish className="h-5 w-5" />
             </button>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -110,7 +121,8 @@ export function App() {
                 </Badge>
               </div>
               <div className="hidden font-mono text-[11px] text-muted-foreground md:block whitespace-nowrap tabular-nums">
-                {weather.tempC}°C · {weather.windDir} {weather.windKmh} km/h · Tide {currentTide.toFixed(2)}m
+                {weather.tempC}°C · {weather.windDir} {weather.windKmh} km/h · Swell {weather.swellM}m · Tide{' '}
+                {currentTide.toFixed(2)}m
               </div>
             </div>
           </div>
@@ -147,25 +159,38 @@ export function App() {
       <main className="mx-auto max-w-[1600px] px-3 py-4 sm:px-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="hidden h-auto w-full flex-wrap justify-start gap-1 bg-muted/60 p-1 md:flex">
+            <TabsTrigger value="dashboard" className="gap-1.5 whitespace-nowrap">
+              <LayoutDashboard className="h-4 w-4" /> Dashboard
+            </TabsTrigger>
             <TabsTrigger value="spots" className="gap-1.5 whitespace-nowrap">
-              <Compass className="h-4 w-4" /> Spots & GPS
+              <Compass className="h-4 w-4" /> Map, Ramps &amp; Laws
             </TabsTrigger>
             <TabsTrigger value="tides" className="gap-1.5 whitespace-nowrap">
-              <Waves className="h-4 w-4" /> Tides, Weather & Cams
+              <Waves className="h-4 w-4" /> Tides, Weather &amp; Cams
             </TabsTrigger>
             <TabsTrigger value="catch" className="gap-1.5 whitespace-nowrap">
-              <Fish className="h-4 w-4" /> Catch Log, ID & Species
+              <Fish className="h-4 w-4" /> Catch Log, ID &amp; Species
             </TabsTrigger>
             <TabsTrigger value="cam" className="gap-1.5 whitespace-nowrap">
               <Camera className="h-4 w-4" /> Catcha Cam
             </TabsTrigger>
             <TabsTrigger value="safety" className="gap-1.5 whitespace-nowrap">
-              <ShieldAlert className="h-4 w-4 text-destructive" /> SOS, Tsunami & 3D Radar
+              <ShieldAlert className="h-4 w-4 text-destructive" /> SOS, Tsunami &amp; 3D Radar
             </TabsTrigger>
             <TabsTrigger value="community" className="gap-1.5 whitespace-nowrap">
-              <Trophy className="h-4 w-4" /> Community, Game & Names
+              <Trophy className="h-4 w-4" /> Community, Game &amp; Names
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dashboard">
+            <DashboardTab
+              selectedSpot={selectedSpot}
+              weather={weather}
+              userCoords={userCoords}
+              onNavigateTab={setActiveTab}
+              onSelectSpot={setSelectedSpot}
+            />
+          </TabsContent>
 
           <TabsContent value="spots">
             <SpotsMapTab
@@ -206,12 +231,13 @@ export function App() {
       {/* Mobile Docked Bottom Navigation Bar */}
       <nav
         aria-label="Mobile Navigation"
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t bg-background/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t bg-background/95 backdrop-blur md:hidden"
       >
         {[
-          { id: 'spots', label: 'Spots', Icon: Compass },
+          { id: 'dashboard', label: 'Home', Icon: LayoutDashboard },
+          { id: 'spots', label: 'Map', Icon: Compass },
           { id: 'tides', label: 'Tides', Icon: Waves },
-          { id: 'catch', label: 'Log/ID', Icon: Fish },
+          { id: 'catch', label: 'Catch', Icon: Fish },
           { id: 'cam', label: 'Cam', Icon: Camera },
           { id: 'safety', label: 'SOS', Icon: ShieldAlert },
           { id: 'community', label: 'Club', Icon: Trophy },
@@ -222,7 +248,7 @@ export function App() {
               key={id}
               type="button"
               onClick={() => setActiveTab(id)}
-              className={`flex min-h-[54px] flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] font-medium transition ${
+              className={`flex min-h-[54px] flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium transition ${
                 active ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
