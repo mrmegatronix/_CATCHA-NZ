@@ -431,8 +431,12 @@ export function CatchLogAndIdTab() {
 
             <div className="rounded-lg border bg-primary/10 p-3 text-sm">
               <div className="flex items-center gap-3">
-                <div className="w-24 shrink-0 rounded-lg bg-slate-950/60 p-1">
-                  <FishIllustration speciesId={matchedSpecies.id} className="h-12 w-full" />
+                <div className="h-14 w-24 shrink-0 overflow-hidden rounded-lg border bg-slate-950">
+                  <FishIllustration
+                    speciesId={matchedSpecies.id}
+                    alt={matchedSpecies.name}
+                    className="h-full w-full"
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
@@ -520,8 +524,8 @@ export function CatchLogAndIdTab() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filteredSpecies.map((sp) => (
               <div key={sp.id} className="overflow-hidden rounded-xl border bg-muted/20 p-3.5 text-sm">
-                <div className="mb-2.5 flex items-center justify-center rounded-lg border bg-gradient-to-b from-slate-900 to-slate-950 p-2">
-                  <FishIllustration speciesId={sp.id} className="h-20 w-full" />
+                <div className="mb-2.5 overflow-hidden rounded-lg border bg-slate-950">
+                  <FishIllustration speciesId={sp.id} alt={sp.name} className="h-36 w-full" />
                 </div>
                 <div className="flex items-start justify-between gap-2">
                   <div>
