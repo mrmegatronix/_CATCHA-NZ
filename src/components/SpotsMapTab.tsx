@@ -240,6 +240,12 @@ export function SpotsMapTab({
                     : spot.biteStatus === 'moderate'
                       ? '#fbbf24'
                       : '#f97316';
+                const showLabel =
+                  isSelected ||
+                  spot.id === 'waimakariri-mouth' ||
+                  spot.id === 'rakaia-mouth' ||
+                  spot.id === 'akaroa-harbour';
+                const alignLeft = x > 430;
                 return (
                   <g
                     key={spot.id}
@@ -249,6 +255,7 @@ export function SpotsMapTab({
                     }}
                     className="cursor-pointer"
                   >
+                    <title>{spot.name} ({spot.depthRange})</title>
                     {isSelected && (
                       <circle cx={x} cy={y} r="14" fill="#22d3ee" opacity="0.28" />
                     )}
@@ -260,15 +267,18 @@ export function SpotsMapTab({
                       stroke="#000f21"
                       strokeWidth="2"
                     />
-                    <text
-                      x={x + 9}
-                      y={y + 3}
-                      fill={isSelected ? '#ffffff' : '#cbd5e1'}
-                      fontSize={isSelected ? '11' : '9'}
-                      fontWeight={isSelected ? '700' : '500'}
-                    >
-                      {spot.name.split(' (')[0]}
-                    </text>
+                    {showLabel && (
+                      <text
+                        x={alignLeft ? x - 10 : x + 9}
+                        y={y + 3}
+                        textAnchor={alignLeft ? 'end' : 'start'}
+                        fill={isSelected ? '#ffffff' : '#cbd5e1'}
+                        fontSize={isSelected ? '11' : '9'}
+                        fontWeight={isSelected ? '700' : '500'}
+                      >
+                        {spot.name.split(' (')[0]}
+                      </text>
+                    )}
                   </g>
                 );
               })}

@@ -31,7 +31,7 @@ export function App() {
   const [appName, setAppName] = useState("Catch'a");
   const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('spots');
-  const [splashOpen, setSplashOpen] = useState(true);
+  const [splashOpen, setSplashOpen] = useState(false);
   const [selectedSpot, setSelectedSpot] = useState<FishingSpot>(CHRISTCHURCH_SPOTS[0]);
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'locked' | 'error'>('idle');
